@@ -63,6 +63,8 @@ class StoreClient:
             percentage = round(positive * 100 / total)
         recent_percentage = None
         recent_count = None
+        recent_source = None
+        recent_reason = "Recent review summary was not available."
         try:
             recent_data = self.http.get_json(
                 f"{self.store_base}/appreviews/{appid}",
@@ -72,13 +74,21 @@ class StoreClient:
             )
             recent = recent_data.get("query_summary") if isinstance(recent_data, dict) else None
             if isinstance(recent, dict):
-                recent_count = _int_or_none(recent.get("total_reviews"))
+                candidate_count = _int_or_none(recent.get("total_reviews"))
                 recent_positive = _int_or_none(recent.get("total_positive"))
-                if recent_count and recent_positive is not None:
+                # Steam has returned lifetime-looking query_summary data for
+                # filter=recent in the wild. Do not label it recent unless the
+                # aggregate is observably distinct from the overall summary.
+                if candidate_count and recent_positive is not None and candidate_count != total:
+                    recent_count = candidate_count
                     recent_percentage = round(recent_positive * 100 / recent_count)
+                    recent_source = "Steam appreviews filter=recent query_summary"
+                    recent_reason = None
+                else:
+                    recent_reason = "Steam appreviews filter=recent returned no independently verifiable recent aggregate."
         except Exception:
             # Recent review enrichment is optional and must not break Store details.
-            pass
+            recent_reason = "Steam appreviews recent review request failed."
         return {
             "review_score": _int_or_none(summary.get("review_score")),
             "review_percentage": percentage,
@@ -86,6 +96,9 @@ class StoreClient:
             "recent_review_score": None,
             "recent_review_percentage": recent_percentage,
             "recent_review_count": recent_count,
+            "recent_review_available": recent_count is not None and recent_percentage is not None,
+            "recent_review_source": recent_source,
+            "recent_review_reason": recent_reason,
             "review_score_desc": summary.get("review_score_desc"),
         }
 

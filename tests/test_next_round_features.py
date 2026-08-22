@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+from cache.memory_cache import MemoryTTLCache
+from clients.store_client import StoreClient
+from config import Settings
 from game_history import GameObservationStore
 from services.local_steam_service import LocalSteamService
 
@@ -84,3 +87,69 @@ def test_local_scan_is_read_only_and_windows_compatdata_is_explicit(tmp_path):
     cleaned = service.storage_clean(appids=[999], targets=["shadercache"], confirm=True)
     assert cleaned["items"][0]["cleaned"] is True
     assert not residual_path.exists()
+
+
+def test_local_scan_uses_global_installed_set_across_libraries(tmp_path):
+    c_root = Path(tmp_path) / "C-Steam"
+    e_root = Path(tmp_path) / "E-SteamLibrary"
+    (c_root / "steamapps" / "shadercache" / "123").mkdir(parents=True)
+    (c_root / "steamapps" / "shadercache" / "123" / "cache.bin").write_bytes(b"cache")
+    (e_root / "steamapps" / "common" / "Balatro").mkdir(parents=True)
+    (e_root / "steamapps" / "appmanifest_123.acf").parent.mkdir(parents=True, exist_ok=True)
+    (e_root / "steamapps" / "appmanifest_123.acf").write_text(
+        '"appid" "123"\n"name" "Balatro"\n"installdir" "Balatro"\n"SizeOnDisk" "456"\n',
+        encoding="utf-8",
+    )
+    service = LocalSteamService(roots=[c_root, e_root], platform_name="Windows")
+    scan = service.scan()
+    assert any(game["appid"] == 123 and str(e_root) in game["install_path"] for game in scan["installed_games"])
+    assert not any(item["appid"] == 123 for item in scan["residuals"])
+    preview = service.storage_preview(appids=[123], targets=["shadercache"])
+    assert preview["preview"] == []
+    cleaned = service.storage_clean(appids=[123], targets=["shadercache"], confirm=True)
+    assert cleaned["items"] == []
+    assert (c_root / "steamapps" / "shadercache" / "123").exists()
+
+
+def test_next_action_explicitly_reports_exclude_owned_is_ignored():
+    from server import build_server
+
+    mcp, runtime = build_server(mock=True)
+    result = mcp._tool_manager._tools["recommendations"].fn(action="next", exclude_owned=True, count=3)
+    assert result["success"] is True
+    assert "owned library" in result["parameter_notes"]["exclude_owned"]
+    owned = {game.appid for game in runtime.library.owned_games()}
+    assert all(item["appid"] in owned for item in result["games"])
+    runtime.close()
+
+
+class _ReviewHTTP:
+    def __init__(self) -> None:
+        self.filters: list[str] = []
+
+    def get_json(self, _url, *, params, **_kwargs):
+        self.filters.append(params["filter"])
+        return {
+            "query_summary": {
+                "total_reviews": 159504,
+                "total_positive": 156314,
+                "review_score": 8,
+            }
+        }
+
+
+def test_recent_review_summary_does_not_copy_lifetime_summary():
+    http = _ReviewHTTP()
+    client = StoreClient(
+        Settings(api_key=None, steam_id=None, mock=True),
+        MemoryTTLCache(),
+        http=http,
+    )
+    result = client.review_summary(123)
+    assert result is not None
+    assert http.filters == ["summary", "recent"]
+    assert result["review_count"] == 159504
+    assert result["recent_review_count"] is None
+    assert result["recent_review_percentage"] is None
+    assert result["recent_review_available"] is False
+    assert "independently verifiable" in result["recent_review_reason"]

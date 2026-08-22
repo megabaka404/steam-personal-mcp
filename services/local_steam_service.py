@@ -57,17 +57,29 @@ class LocalSteamService:
         residuals: list[dict[str, Any]] = []
         locations: list[dict[str, Any]] = []
         installed_ids: set[int] = set()
+        installed_names: dict[int, str] = {}
+        library_records: list[tuple[Path, Path, list[tuple[Path, dict[str, str], int]]]] = []
         for root in roots:
             steamapps = root / "steamapps"
             if not steamapps.is_dir():
                 continue
             locations.append({"path": str(root), "steamapps": str(steamapps)})
+            manifests: list[tuple[Path, dict[str, str], int]] = []
             for manifest in sorted(steamapps.glob("appmanifest_*.acf")):
                 state = _parse_acf(manifest)
                 appid = _int_or_none(state.get("appid")) or _appid_from_name(manifest.name)
                 if not appid:
                     continue
                 installed_ids.add(appid)
+                installed_names.setdefault(appid, state.get("name") or f"App {appid}")
+                manifests.append((manifest, state, appid))
+            library_records.append((root, steamapps, manifests))
+
+        # Residual status must use the union of valid manifests from every
+        # Steam Library. A shadercache can live in one root while the game is
+        # installed in another root.
+        for root, steamapps, manifests in library_records:
+            for manifest, state, appid in manifests:
                 installdir = str(state.get("installdir") or "").strip()
                 install_path = steamapps / "common" / installdir if installdir else None
                 shader_path = steamapps / "shadercache" / str(appid)
@@ -93,7 +105,7 @@ class LocalSteamService:
                 for child in sorted(shadercache.iterdir()):
                     appid = _int_or_none(child.name)
                     if appid and appid not in installed_ids:
-                        residuals.append(_residual(child, appid, "shadercache", self._name_for(appid, installed)))
+                        residuals.append(_residual(child, appid, "shadercache", installed_names.get(appid, f"App {appid}")))
         return {
             "available": True,
             "platform": "windows",

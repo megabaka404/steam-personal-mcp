@@ -358,6 +358,7 @@ class GameIntelService:
         except Exception:
             raw = {}
         source = "Steam public appreviews summary" if raw else "Steam public appreviews summary unavailable"
+        recent_available = bool(raw.get("recent_review_available")) and raw.get("recent_review_count") is not None and raw.get("recent_review_percentage") is not None
         return {
             "overall_reviews": {
                 "positive_pct": raw.get("review_percentage"),
@@ -365,11 +366,15 @@ class GameIntelService:
                 "review_score": raw.get("review_score"),
             },
             "recent_reviews": {
+                "available": recent_available,
                 "positive_pct": raw.get("recent_review_percentage"),
                 "review_count": raw.get("recent_review_count"),
                 "review_score": raw.get("recent_review_score"),
+                "source": raw.get("recent_review_source"),
+                "reason": raw.get("recent_review_reason") if not recent_available else None,
             },
             "source": source,
+            "recent_source": raw.get("recent_review_source"),
         }
 
     def _current_players(self, appid: int) -> int | None:
@@ -437,7 +442,8 @@ def _missing_data(detail: dict[str, Any], review: dict[str, Any], deck: dict[str
     if review.get("overall_reviews", {}).get("review_count") is None:
         missing.append("overall review summary")
     if review.get("recent_reviews", {}).get("review_count") is None:
-        missing.append("recent review summary")
+        reason = review.get("recent_reviews", {}).get("reason")
+        missing.append(f"recent review summary unavailable: {reason}" if reason else "recent review summary")
     if deck.get("status") == "unknown":
         missing.append("Steam Deck compatibility")
     if not workshop.get("workshop_supported"):

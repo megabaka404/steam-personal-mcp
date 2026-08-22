@@ -218,7 +218,13 @@ def register_compound_tools(mcp, runtime) -> None:
             return {"count": len(rows), "games": rows}
         if action == "next":
             rows = runtime.recommendations.what_should_play_next(count)
-            return {"count": len(rows), "games": rows}
+            return {
+                "count": len(rows),
+                "games": rows,
+                "parameter_notes": {
+                    "exclude_owned": "ignored: next is defined as selecting from the user's owned library."
+                },
+            }
         if action == "overlap":
             return runtime.game_intel.library_overlap(game=game, appid=appid)
         if action == "pick":
@@ -292,7 +298,7 @@ def register_compound_tools(mcp, runtime) -> None:
     register(mcp, "store", "Composite Store tool. Actions: search, details, compare, dlc.", store)
     register(mcp, "deals", "Composite deals tool. Actions: specials, deep_discounts, search_sales, summary.", deals)
     register(mcp, "wishlist", "Composite wishlist tool. Actions: list, sales, best_deals, price_history, price_drops, release_watch, buy_advice, purchase_candidates.", wishlist)
-    register(mcp, "recommendations", "Composite recommendations tool. Actions: store, similar, new_releases, library, backlog, return_to, next, overlap, pick.", recommendations)
+    register(mcp, "recommendations", "Composite recommendations tool. Actions: store, similar, new_releases, library, backlog, return_to, next, overlap, pick. exclude_owned applies to Store candidate actions; next selects owned library games and reports that the parameter is ignored.", recommendations)
     register(mcp, "activity", "Composite activity tool. Actions: record, sessions, recent_sessions, year_review, game_change_history.", activity)
     register(mcp, "game_intel", "Composite game intelligence tool. Actions: snapshot, update_impact.", game_intel)
     register(mcp, "local_steam", "Composite local Steam tool for Windows library, installed games, and disk usage.", local_steam)
