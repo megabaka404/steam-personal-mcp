@@ -1,5 +1,7 @@
 # Steam Personal + Store MCP
 
+一句话简介：让你的ai观察你的steam库，游戏时长，游戏价值，成就，愿望单，为你推荐游戏，观察打折信息。
+
 一个面向个人 Steam 账户与公开 Steam Store 数据的只读 MCP Server。
 
 它可以让 ChatGPT、Codex、Claude 等 MCP 客户端直接读取你的 Steam 游戏库、游玩时间、成就、好友、愿望单和商店数据，并进一步完成 backlog 分析、折扣筛选、游戏比较、推荐候选、DLC 检查、价格观察和游玩记录总结。
