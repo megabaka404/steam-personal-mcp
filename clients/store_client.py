@@ -61,10 +61,31 @@ class StoreClient:
         percentage = None
         if total and total > 0 and positive is not None:
             percentage = round(positive * 100 / total)
+        recent_percentage = None
+        recent_count = None
+        try:
+            recent_data = self.http.get_json(
+                f"{self.store_base}/appreviews/{appid}",
+                params={"json": 1, "language": "all", "filter": "recent", "num_per_page": 100},
+                cache_key=f"store-reviews-recent:{appid}", cache_ttl=1800,
+                error_context="Steam Store recent review summary API",
+            )
+            recent = recent_data.get("query_summary") if isinstance(recent_data, dict) else None
+            if isinstance(recent, dict):
+                recent_count = _int_or_none(recent.get("total_reviews"))
+                recent_positive = _int_or_none(recent.get("total_positive"))
+                if recent_count and recent_positive is not None:
+                    recent_percentage = round(recent_positive * 100 / recent_count)
+        except Exception:
+            # Recent review enrichment is optional and must not break Store details.
+            pass
         return {
             "review_score": _int_or_none(summary.get("review_score")),
             "review_percentage": percentage,
             "review_count": total,
+            "recent_review_score": None,
+            "recent_review_percentage": recent_percentage,
+            "recent_review_count": recent_count,
             "review_score_desc": summary.get("review_score_desc"),
         }
 

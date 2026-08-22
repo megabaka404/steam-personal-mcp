@@ -110,6 +110,21 @@ class SteamClient:
             error_context="Steam player stats API",
         )
 
+    def current_players(self, appid: int) -> int | None:
+        key, _ = self._require_credentials()
+        data = self.http.get_json(
+            f"{self.base_url}/ISteamUserStats/GetNumberOfCurrentPlayers/v1/",
+            params={"key": key, "appid": appid, "format": "json"},
+            cache_key=f"current-players:{appid}", cache_ttl=120,
+            error_context="Steam current players API",
+        )
+        response = data.get("response") if isinstance(data, dict) else None
+        value = response.get("player_count") if isinstance(response, dict) else None
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
     def get_friends(self, steamid: str | None = None) -> list[dict[str, Any]]:
         key, resolved_id = self._require_credentials(steamid)
         data = self.http.get_json(

@@ -20,21 +20,25 @@ from tools.summary_tools import register_summary_tools
 from tools.store_recommendation_tools import register_store_recommendation_tools
 from tools.p1_tools import register_p1_tools
 from tools.p2_tools import register_p2_tools
+from tools.compound_tools import register_compound_tools
 
 START_TIME = time.time()
 
 
 def register_tools(mcp: MCPServer, runtime: Runtime) -> None:
-    register_account_tools(mcp, runtime)
-    register_library_tools(mcp, runtime)
-    register_achievement_tools(mcp, runtime)
-    register_friend_tools(mcp, runtime)
-    register_store_tools(mcp, runtime)
-    register_recommendation_tools(mcp, runtime)
-    register_summary_tools(mcp, runtime)
-    register_store_recommendation_tools(mcp, runtime)
-    register_p1_tools(mcp, runtime)
-    register_p2_tools(mcp, runtime)
+    if runtime.settings.compact_tools:
+        register_compound_tools(mcp, runtime)
+    if runtime.settings.legacy_tools or not runtime.settings.compact_tools:
+        register_account_tools(mcp, runtime)
+        register_library_tools(mcp, runtime)
+        register_achievement_tools(mcp, runtime)
+        register_friend_tools(mcp, runtime)
+        register_store_tools(mcp, runtime)
+        register_recommendation_tools(mcp, runtime)
+        register_summary_tools(mcp, runtime)
+        register_store_recommendation_tools(mcp, runtime)
+        register_p1_tools(mcp, runtime)
+        register_p2_tools(mcp, runtime)
 
 
 def build_server(*, mock: bool = False) -> tuple[MCPServer, Runtime]:
@@ -43,8 +47,8 @@ def build_server(*, mock: bool = False) -> tuple[MCPServer, Runtime]:
     mcp = MCPServer(
         name="steam-personal-store",
         version="0.1.0",
-        description="Steam Personal + Store MCP with bounded, deterministic account analysis and public Store data.",
-        instructions="Use AppID when a game name is ambiguous. Personal data depends on Steam profile visibility. Store prices use the configured currency.",
+        description="Steam Personal + Store MCP with compact domain tools, explainable analysis, public Store data, and guarded local Steam inspection.",
+        instructions="Use AppID when a game name is ambiguous. Personal data depends on Steam profile visibility. Store prices use the configured currency. game_intel data is sourced and may be unavailable. storage_cleanup never deletes during scan.",
     )
     register_tools(mcp, runtime)
     return mcp, runtime

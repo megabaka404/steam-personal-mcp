@@ -142,7 +142,14 @@ class MockStoreClient:
             "review_score": min(9, max(0, round(percentage / 10))),
             "review_percentage": percentage,
             "review_count": percentage * 100,
+            "recent_review_score": min(9, max(0, round((percentage - 1) / 10))),
+            "recent_review_percentage": max(0, percentage - 1),
+            "recent_review_count": max(10, percentage * 5),
         }
+
+    def current_players(self, appid: int) -> int | None:
+        item = next((item for item in self.items if item["appid"] == int(appid)), None)
+        return int(item.get("current_players", 0)) if item else None
 
     def featured_items(self) -> list[dict[str, Any]]:
         return [self._search_item(item) for item in self.items if item["details"].get("price_overview", {}).get("discount_percent", 0) > 0]
@@ -170,7 +177,7 @@ def _mock_achievements() -> dict[int, dict[str, Any]]:
 def _mock_store_items() -> list[dict[str, Any]]:
     def item(appid: int, name: str, initial: int | None, final: int | None, discount: int, genres: list[str], score: int, percentage: int, dlc: list[int] | None = None) -> dict[str, Any]:
         price = None if initial is None else {"currency": "USD", "initial": initial, "final": final, "discount_percent": discount}
-        return {"appid": appid, "name": name, "review_score": score, "review_percentage": percentage, "details": {"type": "game", "name": name, "steam_appid": appid, "header_image": f"https://mock.invalid/{appid}/header.jpg", "developers": ["Mock Studio"], "publishers": ["Mock Publisher"], "release_date": {"date": "2024-01-01"}, "genres": [{"id": str(index), "description": genre} for index, genre in enumerate(genres)], "categories": [], "short_description": f"Mock details for {name}.", "price_overview": price, "dlc": dlc or [], "supported_languages": "English", "platforms": {"windows": True, "mac": False, "linux": True}, "metacritic": {"score": score} if score else None, "recommendations": {"total": percentage * 100}}}
+        return {"appid": appid, "name": name, "review_score": score, "review_percentage": percentage, "current_players": max(0, percentage * 10), "details": {"type": "game", "name": name, "steam_appid": appid, "header_image": f"https://mock.invalid/{appid}/header.jpg", "developers": ["Mock Studio"], "publishers": ["Mock Publisher"], "release_date": {"date": "2024-01-01"}, "genres": [{"id": str(index), "description": genre} for index, genre in enumerate(genres)], "tags": {genre: 1 for genre in genres}, "categories": [{"id": 1, "description": "Single-player"}], "short_description": f"Mock details for {name}.", "price_overview": price, "dlc": dlc or [], "supported_languages": "English", "platforms": {"windows": True, "mac": False, "linux": True}, "metacritic": {"score": score} if score else None, "recommendations": {"total": percentage * 100}, "steam_deck_compatibility": {"status": "verified" if appid in {646570, 2379780} else "unknown", "details": None}, "workshop_support": appid in {646570, 413150}}}
 
     return [
         item(646570, "Slay the Spire", 2499, 2499, 0, ["Indie", "Strategy"], 95, 96, [877620]),

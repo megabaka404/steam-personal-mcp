@@ -7,23 +7,33 @@ import httpx
 from server import build_http_app, build_server
 
 
-def test_all_tools_registered():
+def test_compact_tools_registered():
+    mcp, runtime = build_server(mock=True)
+    assert len(mcp._tool_manager._tools) == 12
+    assert {
+        "player",
+        "library",
+        "achievements",
+        "friends",
+        "store",
+        "deals",
+        "wishlist",
+        "recommendations",
+        "activity",
+        "game_intel",
+        "local_steam",
+        "storage_cleanup",
+    } == set(mcp._tool_manager._tools)
+    runtime.close()
+
+
+def test_legacy_tools_can_be_enabled(monkeypatch):
+    monkeypatch.setenv("STEAM_MCP_COMPACT_TOOLS", "0")
+    monkeypatch.setenv("STEAM_MCP_LEGACY_TOOLS", "1")
     mcp, runtime = build_server(mock=True)
     assert len(mcp._tool_manager._tools) == 52
-    assert "steam_activity_summary" in mcp._tool_manager._tools
+    assert "get_profile" in mcp._tool_manager._tools
     assert "recommend_store_for_me" in mcp._tool_manager._tools
-    assert "find_similar_games" in mcp._tool_manager._tools
-    assert "get_wishlist_price_history" in mcp._tool_manager._tools
-    assert "get_wishlist_price_drops" in mcp._tool_manager._tools
-    assert "new_releases_for_me" in mcp._tool_manager._tools
-    assert "friend_activity_summary" in mcp._tool_manager._tools
-    assert "library_value_stats" in mcp._tool_manager._tools
-    assert "missing_dlc_for_owned_games" in mcp._tool_manager._tools
-    assert "wishlist_release_watch" in mcp._tool_manager._tools
-    assert "record_play_session_snapshot" in mcp._tool_manager._tools
-    assert "get_play_session_history" in mcp._tool_manager._tools
-    assert "get_recent_play_sessions" in mcp._tool_manager._tools
-    assert "steam_year_in_review" in mcp._tool_manager._tools
     runtime.close()
 
 

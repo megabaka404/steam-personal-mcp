@@ -18,8 +18,11 @@ from services.store_recommendation_service import StoreRecommendationService
 from services.price_history_service import PriceHistoryService
 from services.p1_service import P1Service
 from services.p2_service import P2Service
+from services.game_intel_service import GameIntelService
+from services.local_steam_service import LocalSteamService
 from price_history import PriceHistoryStore
 from activity_history import ActivityHistoryStore
+from game_history import GameObservationStore
 
 
 @dataclass
@@ -41,6 +44,9 @@ class Runtime:
     p1: P1Service
     activity_history: ActivityHistoryStore
     p2: P2Service
+    game_history: GameObservationStore
+    local_steam: LocalSteamService
+    game_intel: GameIntelService
 
     def close(self) -> None:
         for client in (self.steam, self.store_client):
@@ -49,6 +55,7 @@ class Runtime:
                 http.close()
         self.price_history.close()
         self.activity_history.close()
+        self.game_history.close()
 
 
 def build_runtime(settings: Settings) -> Runtime:
@@ -73,4 +80,17 @@ def build_runtime(settings: Settings) -> Runtime:
     activity_history = ActivityHistoryStore(settings.history_db_path)
     activity = ActivityService(steam, library, achievements, store, settings, activity_history=activity_history)
     p2 = P2Service(activity_history, library)
-    return Runtime(settings, cache, steam, store_client, library, resolver, achievements, store, friends, recommendations, activity, price_history, price_history_service, store_recommendations, p1, activity_history, p2)
+    game_history = GameObservationStore(settings.history_db_path)
+    local_steam = LocalSteamService(store=store_client)
+    game_intel = GameIntelService(
+        store_client=store_client,
+        store_service=store,
+        steam=steam,
+        library=library,
+        resolver=resolver,
+        achievements=achievements,
+        price_history=price_history,
+        game_history=game_history,
+        local_steam=local_steam,
+    )
+    return Runtime(settings, cache, steam, store_client, library, resolver, achievements, store, friends, recommendations, activity, price_history, price_history_service, store_recommendations, p1, activity_history, p2, game_history, local_steam, game_intel)

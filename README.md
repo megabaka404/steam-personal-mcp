@@ -1,109 +1,54 @@
 # Steam Personal + Store MCP
 
-一个本地运行的 Steam MCP Server。连接到 ChatGPT、Codex、Claude 等 MCP 客户端后，你可以用自然语言查询自己的 Steam 数据、搜索商店、分析折扣和整理游戏库。
+一个本地运行的 Steam MCP Server。默认只暴露 12 个按领域组织的复合 tool，降低 MCP schema 和上下文占用；底层 Python 服务仍保留，旧工具可通过兼容开关恢复。
 
-## 可以让ai做什么？
+## 可以做什么
 
-### 1. 查看自己的 Steam
+### 个人数据
 
-- 查看个人资料、和当前正在玩的游戏。
-- 查看游戏库、总游玩时间、最近游玩的游戏和最后游玩时间。
-- 搜索游戏库，找出没玩过、低时长或长期没玩的游戏。
-- 查看成就完成度、最近解锁成就和接近完成的游戏。
-- 查看好友、好友正在玩的游戏以及共同拥有的游戏。
+player 查询 Profile、当前游戏和可见性；library 查询游戏库、时长、最近游玩、backlog、弃坑和回坑候选；achievements 查询成就详情、完成度和最近解锁；friends 查询好友和公开的共同游戏。
 
-常用工具：
+### 商店、折扣和愿望单
 
-~~~text
-get_profile
-get_currently_playing
-get_library
-get_recent_games
-get_library_stats
-get_playtime_summary
-get_achievements
-get_achievement_summary
-get_friends
-get_friends_playing
-~~~
+store 搜索详情、比较游戏和查看 DLC；deals 查询特惠、深度折扣和销售；wishlist 查看愿望单、价格历史、降价、发售变化，以及有证据的 buy / wait / skip 建议。
 
-### 2. 搜索 Steam 商店
+### 推荐和统一游戏画像
 
-- 按关键词搜索游戏，查看当前价、原价和折扣。
-- 查看商店详情、评价、类别、平台和 DLC。
-- 查看特惠、深度折扣和促销列表，为你观察打折情况。
-- 比较多个游戏，辅助决定先玩或先买哪个。
+recommendations 召回商店候选、相似游戏、新作、backlog 和库重复度分析。候选的 candidate_score 只表示检索优先级，不是最终适配度或购买置信度，最终判断交给调用它的 AI。
 
-常用工具：
+game_intel(action="snapshot") 汇总一个游戏的：
+
+- 个人拥有状态、总时长、最近时长、最后游玩和成就。
+- 当前价、原价、折扣、MCP 观察到的价格历史。
+- 总体评价、近期评价、评价数量和可用的 7/30/90 天趋势。
+- Steam Deck 状态、Workshop 支持、当前玩家数和可解释热度指标。
+- 发售日期、更新/build 信息、DLC、已拥有 DLC 和缺少的 DLC。
+- 本地安装路径、SizeOnDisk、实际目录大小和 shadercache；Windows 的 compatdata 明确标记为 not_applicable。
+
+数据缺失会返回 null、unavailable 或 missing_data，并标注 source；不会把未知状态猜成 unsupported，也不会把历史相关性说成更新造成的因果关系。
+
+### 本地 Steam 和安全清理
+
+local_steam 读取 Windows 的 libraryfolders.vdf、appmanifest 文件、已安装游戏和磁盘占用。storage_cleanup 分为 scan、preview、clean 三步，scan 永不删除；clean 必须明确指定 appids、targets 并传入 confirm=true。shadercache 为低风险，compatdata 默认高风险且 Windows 第一版不适用。
+
+## 复合 tool / action
 
 ~~~text
-search_store
-get_store_game
-get_specials
-get_deep_discounts
-search_sales
-compare_store_games
-get_game_dlc
+player: profile | currently_playing | visibility
+library: search | stats | most_played | recent | abandoned | never_played | low_playtime | backlog | return_to | game
+achievements: details | summary | recent | almost_completed | completion_candidates
+friends: list | playing | activity | shared
+store: search | details | compare | dlc
+deals: specials | deep_discounts | search_sales | summary
+wishlist: list | sales | best_deals | price_history | price_drops | release_watch | buy_advice | purchase_candidates
+recommendations: store | similar | new_releases | library | backlog | return_to | next | overlap | pick
+activity: record | sessions | recent_sessions | year_review | game_change_history
+game_intel: snapshot | update_impact
+local_steam: scan | installed | disk_usage
+storage_cleanup: scan | preview | clean
 ~~~
 
-### 3. 分析愿望单和折扣
-
-- 查看愿望单及其中正在打折的游戏。
-- 按价格、折扣和可用评价信息筛选 Deal。
-- 记录 MCP 观察到的价格变化和降价。
-- 查看愿望单游戏的发售状态的变化。
-
-常用工具：
-
-~~~text
-get_wishlist
-get_wishlist_sales
-get_wishlist_best_deals
-get_wishlist_price_history
-get_wishlist_price_drops
-wishlist_release_watch
-~~~
-
-### 4. 生成游戏候选
-
-- 根据自己的高时长游戏、最近游玩和愿望单召回未拥有的商店游戏。
-- 查找相似游戏、近期发布游戏和已拥有游戏缺少的 DLC。
-- 查看游戏库的商店价值和一小时游玩花费美元。
-
-常用工具：
-
-~~~text
-recommend_store_for_me
-find_similar_games
-new_releases_for_me
-missing_dlc_for_owned_games
-library_value_stats
-~~~
-
-推荐工具提供的是“候选召回 + 证据”，不是替你做最终购买判断。candidate_score 只代表一个游戏进入候选集的优先级，不代表最终适配度、购买置信度或“你一定会喜欢”。调用它的 AI 应结合价格、玩法特征、限制条件和你的当前需求继续判断。
-
-候选结果会尽量包含：
-
-- 当前价、原价、折扣、评价百分比和评价数量。
-- genres、tags、categories。
-- 单人、多人、合作和控制器/键鼠支持信息。
-- 是否已拥有、是否在愿望单、是否 Early Access。
-- 发售日期。
-- 与高时长游戏、最近游玩的具体玩法特征交集。
-- 命中的偏好、潜在冲突和缺失数据。
-
-### 5. 记录游玩活动和年度回顾
-
-当 MCP 观察到你正在运行的游戏时，可以保存本地快照，分析被实际观察到的游玩 session，并生成年度回顾。
-
-~~~text
-record_play_session_snapshot
-get_play_session_history
-get_recent_play_sessions
-steam_year_in_review
-~~~
-
-这些不是 Steam 官方完整游玩日志，只统计 MCP 实际观察到的时间，不会猜测没有被观察到的时段。
+项目本身不调用外部 LLM。它负责读取、过滤、聚合、记录观测和返回结构化证据，最终推荐判断由上层模型完成。
 
 ## 快速开始
 
@@ -167,9 +112,18 @@ STEAM_ID=你的SteamID64
 ~~~dotenv
 STEAM_MCP_HOST=127.0.0.1
 STEAM_MCP_PORT=8789
+STEAM_MCP_COMPACT_TOOLS=true
+STEAM_MCP_LEGACY_TOOLS=false
 STEAM_STORE_COUNTRY=us
 STEAM_STORE_LANGUAGE=english
 STEAM_HISTORY_DB=data/steam_history.sqlite3
+~~~
+
+默认启用 12 个复合 tool。如果必须继续使用旧的细粒度工具，可设置：
+
+~~~dotenv
+STEAM_MCP_COMPACT_TOOLS=false
+STEAM_MCP_LEGACY_TOOLS=true
 ~~~
 
 ### 第四步：先用 Mock 模式检查服务
@@ -355,4 +309,3 @@ Invoke-WebRequest http://127.0.0.1:8789/debug/status
 ---
 
 本项目由 ChatGPT 和 Codex 协助完成。
-

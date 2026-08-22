@@ -34,6 +34,8 @@ class Settings:
     min_request_interval: float = 0.15
     history_db_path: str = "data/steam_history.sqlite3"
     mock: bool = False
+    compact_tools: bool = True
+    legacy_tools: bool = False
 
     @classmethod
     def from_env(cls, *, mock: bool = False, env_file: Path | None = None) -> "Settings":
@@ -51,10 +53,12 @@ class Settings:
             min_request_interval=_float_env("STEAM_MIN_REQUEST_INTERVAL", 0.15, 0.0),
             history_db_path=os.getenv("STEAM_HISTORY_DB", "data/steam_history.sqlite3"),
             mock=mock,
+            compact_tools=_bool_env("STEAM_MCP_COMPACT_TOOLS", True),
+            legacy_tools=_bool_env("STEAM_MCP_LEGACY_TOOLS", False),
         )
 
     def public_status(self) -> dict[str, object]:
-        return {"mock": self.mock, "api_key_configured": bool(self.api_key), "steam_id_configured": bool(self.steam_id), "host": self.host, "port": self.port, "store_country": self.store_country, "cache_ttl": self.cache_ttl, "http_timeout": self.http_timeout}
+        return {"mock": self.mock, "api_key_configured": bool(self.api_key), "steam_id_configured": bool(self.steam_id), "host": self.host, "port": self.port, "store_country": self.store_country, "cache_ttl": self.cache_ttl, "http_timeout": self.http_timeout, "compact_tools": self.compact_tools, "legacy_tools": self.legacy_tools}
 
 
 def _int_env(name: str, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
@@ -75,6 +79,13 @@ def _float_env(name: str, default: float, minimum: float | None = None) -> float
     except ValueError:
         value = default
     return max(minimum, value) if minimum is not None else value
+
+
+def _bool_env(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
 def parse_args() -> argparse.Namespace:

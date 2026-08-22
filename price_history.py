@@ -18,9 +18,18 @@ class PriceHistoryStore:
         if str(path) != ":memory:":
             self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._memory_connection = (
+            sqlite3.connect(":memory:", timeout=10, check_same_thread=False)
+            if str(path) == ":memory:"
+            else None
+        )
+        if self._memory_connection is not None:
+            self._memory_connection.row_factory = sqlite3.Row
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
+        if self._memory_connection is not None:
+            return self._memory_connection
         target = str(self.path)
         connection = sqlite3.connect(target, timeout=10)
         connection.row_factory = sqlite3.Row
