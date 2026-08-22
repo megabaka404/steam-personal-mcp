@@ -1,63 +1,238 @@
 # Steam Personal + Store MCP
 
-一个可长期运行的 Steam Personal + Store MCP Server。它把 Steam 个人账户数据和公开 Steam Store 数据分成两个 client，再通过库、成就、好友、愿望单、推荐和综合摘要服务组合成结构化 MCP tools。
+一个面向个人 Steam 账户与公开 Steam Store 数据的只读 MCP Server。
 
-它不调用外部 LLM，不保存 Steam 密码、Steam Guard、Cookie 或真实运行时数据库；推荐和愿望单 deal 排序都是确定性算法。
+它可以让 ChatGPT、Codex、Claude 等 MCP 客户端直接读取你的 Steam 游戏库、游玩时间、成就、好友、愿望单和商店数据，并进一步完成 backlog 分析、折扣筛选、游戏比较、推荐候选、DLC 检查、价格观察和游玩记录总结。
 
-## 功能
+例如可以直接问：
 
-- 账户：profile、当前正在玩的游戏、隐私可见性。
-- 个人库：最近游戏、分页库、模糊搜索、拥有判断、游玩统计、从未玩/低时长/弃坑分析。
-- 成就：单游戏详情、完成摘要、最近解锁、接近全成就和补成就候选。
-- 好友：好友列表、好友正在玩的游戏、共同拥有游戏。
-- 商店：搜索、详情、价格、折扣、DLC、当前 featured specials、按价格/折扣/评价比较。
-- 愿望单：读取公开 wishlist appID，再用 Store appdetails 补全价格和详情；不可读时返回明确的 `available=false`，不会伪造数据。
-- 推荐：backlog、return-to、comfort、recent、balanced、随机挑选和“下一款玩什么”。
-- 摘要：`steam_activity_summary` 和 `steam_deals_summary` 控制返回大小，适合直接给上层模型使用。
+* “我最近都在玩什么？”
+* “从我的库里挑几个现在适合玩的游戏。”
+* “我的愿望单现在有什么值得看的折扣？”
+* “找一些和 Slay the Spire 类似、但我还没买的游戏。”
+* “根据我的游玩历史给我一批打折游戏候选。”
+* “我有哪些买了但几乎没玩的游戏？”
+* “哪些游戏快全成就了？”
+* “我拥有的游戏还有哪些 DLC 没买？”
+* “我的 Steam 库按当前商店价格大概值多少？”
+* “总结一下 MCP 最近观察到的游玩记录。”
 
-## 当前接口依据
+项目本身不调用外部 LLM。它负责读取、过滤、聚合和结构化 Steam 数据，最终判断可以交给上层模型完成。
 
-个人接口使用 Steam 官方 Web API 的 `ISteamUser`、`IPlayerService` 和 `ISteamUserStats`。Store 侧只使用 JSON/API 风格接口：`/api/appdetails`、`/api/storesearch/`、`/api/featuredcategories/`。愿望单使用当前可访问的 `IWishlistService/GetWishlist/v1`，它通常只给 appID、priority、date_added，随后逐个获取 Store 详情；该 endpoint 的可用性和返回范围由 Steam 账户隐私及 Valve 运行状态决定。
+---
+
+## 特性
+
+### 个人账户
+
+* Profile、在线状态和当前游戏
+* 最近游玩
+* 完整游戏库
+* 总游玩时间与分布
+* 从未启动、低时长和长期弃坑游戏
+* 回坑候选与 backlog 分析
+* 库价值估算
+
+### 成就
+
+* 单游戏完整成就
+* 完成度摘要
+* 最近解锁
+* 接近全成就的游戏
+* 补成就候选
+
+### 好友
+
+* 好友列表
+* 当前正在玩游戏的好友
+* 与指定好友的共同游戏
+* 好友活动摘要
+
+### Steam Store
+
+* 游戏搜索
+* Store 详情
+* 当前价格与折扣
+* Featured specials
+* 深度折扣
+* 销售搜索
+* 游戏比较
+* DLC
+* 相似游戏
+* 最近发售游戏
+* 根据个人库生成 Store 候选
+
+### 愿望单
+
+* 愿望单读取
+* 当前折扣
+* deal 排序
+* MCP 本地观察到的价格历史
+* 价格下降检测
+* 发售状态变化观察
+
+### 活动记录
+
+Steam Web API 不提供完整的历史启动记录，因此本项目支持记录 MCP 自己观察到的当前游戏 snapshot，并据此推断有限的 play sessions。
+
+它还可以生成一个明确标注为 **非 Steam 官方年度回顾** 的 year review。
+
+没有被 MCP 观察到的游玩行为不会被凭空补全。
+
+---
+
+## 推荐设计
+
+推荐类工具的目标不是让 MCP 自己替用户做最终决定。
+
+推荐流程更适合拆成两层：
+
+```text
+Steam / Store 数据
+        ↓
+候选召回与过滤
+        ↓
+结构化证据
+        ↓
+LLM 根据用户上下文做最终判断
+```
+
+MCP 可以提供：
+
+* 当前价格和折扣
+* review percentage / count
+* genres
+* categories
+* Store metadata
+* 是否已拥有
+* 是否在愿望单
+* 用户高时长游戏
+* 最近游玩游戏
+* 候选与这些游戏之间的具体共同特征
+* candidate reasons
+* potential mismatches
+* deterministic candidate score
+
+其中 `candidate_score` 只用于候选召回和粗排，不应被解释为“用户喜欢这款游戏的概率”。
+
+像 `Indie`、`Single-player`、`Family Sharing` 这类非常宽泛的 metadata 本身不应成为强玩法相似证据。
+
+更具体的玩法特征，例如：
+
+* roguelike
+* deckbuilder
+* turn-based
+* tactical
+* CRPG
+* management
+* platformer
+* FPS
+* action combat
+
+应拥有更高的信息价值。
+
+最终的：
+
+> “这游戏到底适不适合这个用户？”
+
+交给调用 MCP 的 LLM 判断。
+
+---
+
+## 数据来源
+
+个人账户相关数据主要来自 Steam 官方 Web API：
+
+* `ISteamUser`
+* `IPlayerService`
+* `ISteamUserStats`
+
+Store 侧使用公开 JSON/API 风格接口，例如：
+
+* `/api/appdetails`
+* `/api/storesearch/`
+* `/api/featuredcategories/`
+
+愿望单使用当前可访问的：
+
+```text
+IWishlistService/GetWishlist/v1
+```
+
+该接口通常只返回 appID、priority 和 date_added，因此项目会再通过 Store 数据补充游戏名称、价格、折扣等信息。
 
 参考：
 
-- [Steam Web API Overview](https://partner.steamgames.com/doc/webapi_overview)
-- [ISteamUser](https://partner.steamgames.com/doc/webapi/ISteamUser)
-- [IPlayerService](https://partner.steamgames.com/doc/webapi/IPlayerService)
-- [ISteamUserStats](https://partner.steamgames.com/doc/webapi/ISteamUserStats)
-- [IStoreService](https://partner.steamgames.com/doc/webapi/IStoreService)
+* [Steam Web API Overview](https://partner.steamgames.com/doc/webapi_overview)
+* [ISteamUser](https://partner.steamgames.com/doc/webapi/ISteamUser)
+* [IPlayerService](https://partner.steamgames.com/doc/webapi/IPlayerService)
+* [ISteamUserStats](https://partner.steamgames.com/doc/webapi/ISteamUserStats)
+* [IStoreService](https://partner.steamgames.com/doc/webapi/IStoreService)
 
-项目不解析 Store HTML，不使用浏览器自动化，不要求 Steam 密码或 Steam Guard。
+项目不解析 Steam Store HTML，不使用浏览器自动化，也不需要 Steam 密码、Steam Guard 或 Cookie。
 
-## 要求与安装
+---
 
-Python 3.10+，建议 Python 3.12+。
+## 要求
 
-PowerShell：
+Python 3.10+。
+
+建议使用较新的 Python 3.12+。
+
+安装项目依赖：
 
 ```powershell
 cd C:\path\to\steam-personal-mcp
+
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+
 python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-如果 PowerShell 禁止激活脚本，可以直接使用：
+如果 PowerShell 禁止激活脚本，也可以直接：
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-依赖：当前 MCP Python SDK 2.0.0、Pydantic 2、httpx、pytest。实际启动入口仍是 `server.py`。
+实际启动入口：
+
+```text
+server.py
+```
+
+---
 
 ## Steam 凭据
 
-1. 在 Steam 登录后打开 [Steam Web API Key 页面](https://steamcommunity.com/dev/apikey)，创建个人 API Key。
-2. 使用 SteamID64 填入 `STEAM_ID`。可以从个人 profile URL 的数字路径获取，或使用 Steam OpenID/公开 SteamID 工具确认。
-3. 不要把 `.env` 提交到 Git。`.gitignore` 已忽略 `.env`、数据库、缓存和日志。
+### 1. Steam Web API Key
 
-推荐的 Steam 隐私设置：Profile 设为 Public，Game Details 设为 Public，取消“不让别人看到总游戏时间”的选项；好友列表如果需要读取，也必须公开。隐私设置变化后 Steam API 可能需要一点时间同步。
+登录 Steam 后打开：
+
+https://steamcommunity.com/dev/apikey
+
+创建个人 API Key。
+
+### 2. SteamID64
+
+把自己的 SteamID64 填入 `STEAM_ID`。
+
+### 3. 隐私设置
+
+建议：
+
+* Profile：Public
+* Game Details：Public
+* 游戏总时长：允许公开
+* 如果需要好友工具，Friends List 也需要公开
+
+Steam 隐私设置修改后可能需要一些时间同步。
+
+不要把 `.env` 提交到 Git。
+
+---
 
 ## 环境变量
 
@@ -66,27 +241,45 @@ Copy-Item .env.example .env
 ```env
 STEAM_API_KEY=
 STEAM_ID=
+
 STEAM_MCP_HOST=127.0.0.1
 STEAM_MCP_PORT=8789
+
 STEAM_CACHE_TTL=300
 STEAM_HTTP_TIMEOUT=15
+
 STEAM_STORE_COUNTRY=us
 STEAM_STORE_LANGUAGE=english
+
 STEAM_MAX_RETRIES=2
 STEAM_MIN_REQUEST_INTERVAL=0.15
 ```
 
-价格按 Steam 返回的真实 currency 和最小货币单位输出，例如 `price_minor` 与转换后的 `price`；项目不做汇率换算，也不把金额强行当成美元。
+Store 价格使用 Steam 实际返回的 currency 和最小货币单位。
 
-## 运行
+例如：
 
-真实模式：
+```json
+{
+  "currency": "USD",
+  "price_minor": 1239,
+  "price": 12.39
+}
+```
+
+项目不自行进行汇率换算。
+
+---
+
+## 启动
+
+真实 Steam 数据：
 
 ```powershell
 python server.py
 ```
 
-默认地址：
+默认：
 
 ```text
 MCP:     http://127.0.0.1:8789/mcp
@@ -94,23 +287,37 @@ Health:  http://127.0.0.1:8789/health
 Debug:   http://127.0.0.1:8789/debug/status
 ```
 
-Mock 模式不需要 Steam API Key 和 SteamID：
+Mock 模式：
 
 ```powershell
 python server.py --mock
 ```
 
-还保留了 stdio 入口，适合只支持本地进程的 MCP client：
+Mock 不需要 Steam API Key 或 SteamID。
+
+stdio：
 
 ```powershell
 python server.py --stdio --mock
 ```
 
-`/health` 不访问 Steam，始终只报告进程可用性；`/debug/status` 报告 cache entries、hits、misses、uptime、是否 mock 以及最近一次 API connectivity 状态，不返回 API Key。
+`/health` 只检查服务本身是否存活，不请求 Steam。
 
-## MCP 客户端配置示例
+`/debug/status` 可以查看：
 
-支持远程 Streamable HTTP 的 MCP client 通常可使用：
+* uptime
+* mock 状态
+* cache entries
+* cache hits / misses
+* 最近 API connectivity
+
+不会返回 API Key。
+
+---
+
+## MCP 客户端
+
+支持 Streamable HTTP 的 MCP 客户端可以使用：
 
 ```json
 {
@@ -122,97 +329,142 @@ python server.py --stdio --mock
 }
 ```
 
-不同 ChatGPT/Codex/MCP 客户端的配置文件位置和字段名称可能不同；核心是把 URL 指向 `/mcp`，不是 `/health`。本地部署只监听 `127.0.0.1`。若要放到公网，必须在反向代理层增加 HTTPS、认证、请求体限制和访问日志脱敏。
+不同 ChatGPT、Codex、Claude 和其他 MCP 客户端的外层配置格式可能不同。
 
-## 实际注册的 MCP Tools
+核心 endpoint 是：
 
-总计 52 个：
+```text
+/mcp
+```
 
-### 账户
+而不是：
 
-- `get_profile()`
-- `get_currently_playing()`
-- `get_account_visibility()`
+```text
+/health
+```
 
-### 游戏库
+默认只监听 `127.0.0.1`。
 
-- `get_recent_games(count=10)`
-- `get_library(include_free_games=true, sort_by="playtime", order="desc", limit=null, offset=0)`
-- `search_library(query, limit=20)`
-- `get_game_in_library(game=null, appid=null, include_store=false)`
-- `get_most_played(period="all", count=20)`，period 为 `all` 或 `recent`
-- `get_never_played(count=50)`
-- `get_low_playtime_games(max_hours=2, count=50)`
-- `get_abandoned_games(min_hours=1, max_hours=20, inactive_days=180, count=30)`
-- `get_library_stats()`
-- `get_playtime_summary(top_n=20)`
+如果将服务暴露到公网，应在外部增加 HTTPS 和认证，不建议直接公开 Python MCP endpoint。
 
-### 成就
+---
 
-- `get_achievements(game=null, appid=null, include_locked=true)`
-- `get_achievement_summary(game=null, appid=null)`
-- `get_recent_achievements(days=30, count=30)`
-- `get_almost_completed_games(min_completion=70, max_completion=99.99, count=20)`
-- `get_completion_candidates(count=20)`
+# MCP Tools
 
-### 好友
+当前版本共注册 **52 个 tools**。
 
-- `get_friends(limit=100)`
-- `get_friends_playing(limit=100)`
-- `get_shared_games_with_friend(friend_steam_id, count=100)`
+## Account
 
-### Store
+| Tool                     | 作用                       |
+| ------------------------ | ------------------------ |
+| `get_profile`            | Profile、头像、账户状态与当前游戏     |
+| `get_currently_playing`  | 判断当前是否正在玩游戏              |
+| `get_account_visibility` | 检查 Profile、游戏库、成就和好友是否可读 |
 
-- `search_store(query, count=20)`
-- `get_store_game(game=null, appid=null)`
-- `get_specials(count=50, min_discount=0, max_price=null, min_price=null, sort_by="discount", exclude_owned=false)`
-- `get_deep_discounts(min_discount=70, count=50, exclude_owned=false)`
-- `search_sales(query=null, min_discount=0, max_price=null, genres=null, count=30, exclude_owned=false)`
-- `compare_store_games(games)`，最多 10 个字符串或 AppID
-- `get_game_dlc(game=null, appid=null, only_discounted=false)`
+## Library
 
-### 愿望单
+| Tool                      | 作用                            |
+| ------------------------- | ----------------------------- |
+| `get_recent_games`        | 最近游玩的游戏                       |
+| `get_library`             | 分页、排序读取完整游戏库                  |
+| `search_library`          | 模糊搜索已拥有游戏                     |
+| `get_game_in_library`     | 判断是否拥有某游戏并返回个人数据              |
+| `get_most_played`         | 总时长或近两周最高游戏                   |
+| `get_never_played`        | 从未启动游戏                        |
+| `get_low_playtime_games`  | 低时长游戏                         |
+| `get_abandoned_games`     | 玩过但长期未打开的游戏                   |
+| `get_library_stats`       | 游戏库整体统计                       |
+| `get_playtime_summary`    | 面向 LLM 的精简游玩摘要                |
+| `find_backlog_candidates` | backlog 候选                    |
+| `find_games_to_return_to` | 回坑候选                          |
+| `recommend_from_library`  | 从已拥有游戏中进行确定性粗排                |
+| `pick_a_game_for_me`      | 按条件随机选择游戏                     |
+| `what_should_i_play_next` | 下一款游戏候选                       |
+| `compare_my_games`        | 比较最多十个游戏的个人数据                 |
+| `library_value_stats`     | 估算当前/MSRP 库价值和 playtime value |
 
-- `get_wishlist(only_discounted=false, limit=100)`
-- `get_wishlist_sales(min_discount=0, max_price=null, sort_by="discount", limit=100)`
-- `get_wishlist_best_deals(limit=20)`
-- `get_wishlist_price_history(appid=null, limit=100)`：返回 MCP 自己观察到的价格历史，不是 Steam 官方全平台历史最低价。
-- `get_wishlist_price_drops()`：返回 MCP 观察到的降价和本地历史低价。
+## Achievements
 
-### 推荐
+| Tool                         | 作用        |
+| ---------------------------- | --------- |
+| `get_achievements`           | 完整成就与锁定状态 |
+| `get_achievement_summary`    | 精简成就完成度   |
+| `get_recent_achievements`    | 最近解锁成就    |
+| `get_almost_completed_games` | 接近全成就游戏   |
+| `get_completion_candidates`  | 补全成就候选    |
 
-- `pick_a_game_for_me(count=1, never_played_only=false, max_playtime_hours=null, min_playtime_hours=null, inactive_days=null, exclude_appids=null, randomize=true)`
-- `recommend_from_library(count=5, mode="balanced")`，mode 为 `balanced`、`backlog`、`return_to`、`comfort`、`recent`
-- `find_backlog_candidates(count=20, max_hours=null)`
-- `find_games_to_return_to(count=20, min_hours=1)`
-- `compare_my_games(games)`，最多 10 个
-- `what_should_i_play_next(count=5)`，返回 3–10 个候选
-- `recommend_store_for_me(count=10, max_price=null, min_discount=0, include_wishlist=true, exclude_early_access=false)`
-- `find_similar_games(game=null, appid=null, count=20, exclude_owned=true, max_price=null)`
+## Friends
 
-### P1 个性化分析
+| Tool                           | 作用            |
+| ------------------------------ | ------------- |
+| `get_friends`                  | 好友列表          |
+| `get_friends_playing`          | 当前正在玩游戏的好友    |
+| `get_shared_games_with_friend` | 与指定好友共同拥有的游戏  |
+| `friend_activity_summary`      | 好友当前活动与共同游戏摘要 |
 
-- `new_releases_for_me(days=30, count=20, exclude_owned=true)`：从可发现的 Store 候选中筛选近期发布且匹配个人库偏好的游戏。
-- `friend_activity_summary(limit=100)`：汇总公开好友在线、当前游戏和尽力而为的共同拥有游戏数据。
-- `library_value_stats()`：使用当前 Store/MSRP 价格估算库价值、游玩小时和每美元小时数。
-- `missing_dlc_for_owned_games(only_discounted=false, min_discount=0, count=100, exclude_soundtracks=false, exclude_cosmetics=false)`。
-- `wishlist_release_watch()`：记录愿望单的 released/ upcoming 状态和 MCP 观察到的变化。
+## Store
 
-### P2 活动观察与年度回顾
+| Tool                          | 作用                       |
+| ----------------------------- | ------------------------ |
+| `search_store`                | 搜索 Steam Store           |
+| `get_store_game`              | 游戏详情、价格、平台、DLC 等         |
+| `get_specials`                | 当前 featured specials     |
+| `get_deep_discounts`          | 深度折扣                     |
+| `search_sales`                | 按关键词、折扣、价格、genre 搜索促销    |
+| `compare_store_games`         | 比较最多十个 Store 游戏          |
+| `get_game_dlc`                | 获取游戏 DLC                 |
+| `find_similar_games`          | 根据 Store metadata 寻找相似游戏 |
+| `new_releases_for_me`         | 从近期公开 Store 候选中寻找可能相关的新作 |
+| `missing_dlc_for_owned_games` | 查找已拥有游戏但尚未拥有的 DLC        |
+| `recommend_store_for_me`      | 根据个人库和 Store 数据生成未拥有游戏候选 |
 
-- `record_play_session_snapshot()`：当 Steam 当前报告正在游玩的游戏时，保存一次 MCP 观察快照。
-- `get_play_session_history(days=365, count=100)`：从连续观察快照推断游玩 session。
-- `get_recent_play_sessions(days=30, count=20)`：返回近期推断 session。
-- `steam_year_in_review(year=null)`：基于本地 MCP 观察生成非官方年度回顾。
+Store 搜索与推荐不是 Steam 全目录扫描。
 
-P2 的活动数据只在 MCP 调用 `get_profile`、`get_currently_playing`、`steam_activity_summary` 或显式调用 `record_play_session_snapshot` 时采样。session 时长只计算两个观察点之间的跨度，不填补未观察到的时间，也不声称是 Steam 官方启动日志或官方 Year in Review。
+它们基于公开 Store search、featured specials、wishlist 和能够获取到的 Store metadata，因此结果应该理解为：
 
-### 综合
+> “当前候选集合中值得进一步判断的项目”
 
-- `steam_activity_summary(include_store=true)`
-- `steam_deals_summary(exclude_owned=true)`
+而不是严格意义上的全 Steam 最优推荐。
 
-除明确的 unavailable/private 结果外，工具成功响应带 `success: true`；错误统一为：
+## Wishlist
+
+| Tool                         | 作用                                 |
+| ---------------------------- | ---------------------------------- |
+| `get_wishlist`               | 读取愿望单并补全 Store 数据                  |
+| `get_wishlist_sales`         | 当前打折愿望单                            |
+| `get_wishlist_best_deals`    | 根据折扣、价格和评价进行确定性 deal 粗排            |
+| `get_wishlist_price_history` | MCP 自己观察到的价格历史                     |
+| `get_wishlist_price_drops`   | 检测 wishlist 价格下降与本地观察低价            |
+| `wishlist_release_watch`     | 观察 coming soon / release date 状态变化 |
+
+`get_wishlist_price_history` 不是 Steam 官方历史最低价数据库。
+
+它只记录 MCP 实际观察过的数据。
+
+## Activity / Summary
+
+| Tool                           | 作用                             |
+| ------------------------------ | ------------------------------ |
+| `record_play_session_snapshot` | 如果当前正在玩游戏，记录一次 MCP snapshot    |
+| `get_play_session_history`     | 根据 snapshot 推断历史 play sessions |
+| `get_recent_play_sessions`     | 最近推断出的 sessions                |
+| `steam_year_in_review`         | 基于 MCP 观察记录生成非官方年度回顾           |
+| `steam_activity_summary`       | 一次返回账户、最近游戏、库统计、成就等精简摘要        |
+| `steam_deals_summary`          | 当前 specials、愿望单折扣和深度折扣摘要       |
+
+---
+
+## 错误格式
+
+正常工具通常返回：
+
+```json
+{
+  "success": true
+}
+```
+
+错误统一使用类似：
 
 ```json
 {
@@ -224,50 +476,225 @@ P2 的活动数据只在 MCP 调用 `get_profile`、`get_currently_playing`、`s
 }
 ```
 
-常见 code：`INVALID_API_KEY`、`PROFILE_PRIVATE`、`GAME_DETAILS_PRIVATE`、`ACHIEVEMENTS_UNAVAILABLE`、`GAME_NOT_FOUND`、`AMBIGUOUS_GAME`、`STORE_UNAVAILABLE`、`RATE_LIMITED`、`NETWORK_ERROR`、`INVALID_ARGUMENT`、`UNSUPPORTED`。
+常见错误：
 
-## 缓存与 HTTP 稳定性
+* `INVALID_API_KEY`
+* `PROFILE_PRIVATE`
+* `GAME_DETAILS_PRIVATE`
+* `ACHIEVEMENTS_UNAVAILABLE`
+* `GAME_NOT_FOUND`
+* `AMBIGUOUS_GAME`
+* `STORE_UNAVAILABLE`
+* `RATE_LIMITED`
+* `NETWORK_ERROR`
+* `INVALID_ARGUMENT`
+* `UNSUPPORTED`
 
-所有 API 缓存都是单进程内存 TTL。价格观察例外：wishlist、wishlist sales、wishlist best deals 每次成功读取 Store 价格时，会写入 `STEAM_HISTORY_DB` 指定的 SQLite 文件，默认是 `data/steam_history.sqlite3`。相同 AppID、货币和价格状态会合并计数，不会无限重复插入。历史价格只代表 MCP 自己观察到的数据。
+对于正常但数据不可获得的情况，例如：
 
-库和摘要工具有 limit/offset 或固定上限；最近成就只扫描不超过 30 个最近游戏，避免为几千个库项目制造请求风暴。
+* 私有愿望单
+* 某游戏没有公开成就
+* Steam 没有返回所需数据
+
+工具会尽量使用：
+
+```json
+{
+  "available": false
+}
+```
+
+而不是伪造空数据。
+
+---
+
+## Cache 与 HTTP
+
+缓存为单进程内存 TTL，不写入用户文件。
+
+典型缓存包括：
+
+* Profile
+* Currently Playing
+* Recent Games
+* Owned Games
+* Achievements
+* Store Details
+* Featured Sales
+
+HTTP client 包含：
+
+* User-Agent
+* timeout
+* 请求间隔
+* retry
+* exponential backoff
+* 429 处理
+* 5xx 处理
+* 非 JSON 返回处理
+* 缺字段容错
+
+大型库分析和摘要工具会设置边界，避免一次调用对 Steam API 产生大量请求。
+
+---
 
 ## Wishlist 限制
 
-Steam 当前可访问的 wishlist service 主要返回 appID、priority、date_added，不是完整的价格对象。项目会对这些 appID 再请求 Store appdetails；如果 wishlist 为私有、服务不可访问或 Steam 返回空结构，工具返回 `available: false`、`supported: false` 和原因。它不会使用账户密码、Cookie、Steam Guard、浏览器自动化或 HTML wishlistdata 页面。
+Steam Wishlist API 的实际可用性受：
+
+* Steam 隐私设置
+* Valve endpoint 状态
+* 返回字段范围
+
+影响。
+
+Wishlist service 通常只直接提供：
+
+```text
+appid
+priority
+date_added
+```
+
+项目随后使用 Store 接口补充详情。
+
+如果愿望单不可读取，会明确返回 unavailable / unsupported，而不会使用：
+
+* Steam 密码
+* Cookie
+* Steam Guard
+* 浏览器自动化
+* HTML scraping
+
+作为替代方案。
+
+---
+
+## Play Session 限制
+
+Steam Web API 不提供完整的逐次启动历史。
+
+因此：
+
+```text
+record_play_session_snapshot
+```
+
+只能记录 MCP **实际观察到** 的当前游戏。
+
+由这些 snapshot 推断出的：
+
+* session duration
+* yearly activity
+* returned-to games
+* new games started
+
+都只能代表 MCP 的观察范围。
+
+`steam_year_in_review` 会明确标记：
+
+```text
+is_official_steam_year_in_review = false
+```
+
+不会把当前累计 playtime 倒推成虚假的年度历史。
+
+---
 
 ## 常见问题
 
 ### `INVALID_API_KEY`
 
-检查 `.env` 是否在运行目录、变量名是否拼写正确，并重新启动进程。Mock 模式不需要凭据。
+检查：
 
-### 库为空或 `PROFILE_PRIVATE`
+* `.env` 是否正确注入
+* 环境变量名称
+* Steam API Key 是否仍然有效
 
-公开 Profile、Game Details 和游戏时间，并确认 `STEAM_ID` 是 SteamID64。Steam Web API 只会返回对当前 API 调用可见的个人数据。
+Mock 模式不需要凭据。
+
+### 游戏库为空
+
+确认：
+
+* Profile 是 Public
+* Game Details 是 Public
+* `STEAM_ID` 是正确的 SteamID64
 
 ### 成就不可用
 
-有些游戏没有成就、没有公开成就 schema、玩家资料不可读，或 Steam API 对该 AppID 返回拒绝。工具会返回 `available: false`，不会把零成就误报为 100%。
+并不是所有游戏都有：
 
-### Store 搜索或 specials 数量较少
+* Steam achievements
+* 公开 achievement schema
+* 可读玩家成就
 
-Store 公开 JSON 接口返回的是搜索/featured 结果，不是保证完整的全量商品数据库；featured specials 特别适合“当前有什么值得看”，但不能当作 Steam 全目录的严格排序。需要精确商品时使用 AppID。
+这种情况会返回 unavailable，而不是把“没有数据”解释成 0% 或 100%。
 
-### 价格不对地区
+### Store 搜索结果为什么不全？
 
-设置 `STEAM_STORE_COUNTRY`，例如 `cn`、`us`、`jp`。项目不做人民币/美元汇率转换。
+公开 Store search / featured endpoint 不是 Steam 商品全量数据库。
+
+因此：
+
+```text
+search_store
+search_sales
+new_releases_for_me
+recommend_store_for_me
+```
+
+返回的是有界候选集。
+
+如果需要查询确定的游戏，优先使用 AppID。
+
+### 价格地区不对
+
+修改：
+
+```env
+STEAM_STORE_COUNTRY=cn
+```
+
+也可以使用：
+
+```text
+us
+jp
+...
+```
+
+项目不会自动做汇率换算。
+
+---
 
 ## 安全
 
-- 不要提交 `.env`、API Key、密码、Cookie、Steam Guard、用户数据库或真实运行时数据。
-- API Key 不写入代码、不打印日志、不出现在 debug endpoint。
-- 真实公网部署必须加 HTTPS、Bearer/OAuth 或反向代理认证；当前示例默认只绑定本机地址。
-- 只使用公开 Steam API 数据，不尝试绕过 Steam 隐私设置。
+* 不提交 `.env`
+* 不提交 Steam API Key
+* 不保存 Steam 密码
+* 不保存 Steam Guard
+* 不需要 Steam Cookie
+* API Key 不打印到日志
+* debug endpoint 不返回 secret
+* 不绕过 Steam 隐私设置
+* 不自动购买、交易或修改 Steam 账户
+* 默认只绑定 `127.0.0.1`
+
+如果部署到公网，必须额外配置：
+
+* HTTPS
+* Bearer / OAuth / reverse proxy authentication
+* 合理的请求限制
+* 日志脱敏
+
+---
 
 ## 测试
 
-所有测试使用本地 mock clients 或 `httpx.MockTransport`，不依赖真实 Steam：
+测试应使用 mock clients 或 `httpx.MockTransport`，避免依赖真实 Steam 状态。
+
+运行：
 
 ```powershell
 pytest
@@ -277,16 +704,31 @@ Mock MCP 冒烟：
 
 ```powershell
 python server.py --mock
+
 Invoke-WebRequest http://127.0.0.1:8789/health
 Invoke-WebRequest http://127.0.0.1:8789/debug/status
 ```
 
-## 目录结构
+推荐与发现相关测试应特别覆盖：
+
+* deterministic ordering
+* owned exclusion
+* count / pagination bounds
+* 缺失 Store metadata
+* private/unavailable 数据
+* 泛 genre 不制造虚假高相似度
+* wishlist / discount 与玩法适配度分离
+* 新作推荐不会因为 `Indie` 等宽泛标签产生强关联
+
+---
+
+## 项目结构
 
 ```text
 server.py
 config.py
 runtime.py
+
 models/
 clients/
 services/
@@ -294,5 +736,21 @@ resolver/
 cache/
 tools/
 tests/
-examples/questions.md
+
+examples/
+  questions.md
 ```
+
+---
+
+## 原则
+
+这个项目尽量保持几件事简单：
+
+**Steam 提供事实。**
+
+**MCP 负责读取、筛选、聚合和证据。**
+
+**LLM 负责理解用户并做最终判断。**
+
+不要为了让 MCP 看起来更“聪明”，把无法可靠推断的东西伪装成确定答案。
