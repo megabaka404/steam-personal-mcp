@@ -743,14 +743,10 @@ examples/
 
 ---
 
-## 原则
+# Codex Git Attribution
 
-这个项目尽量保持几件事简单：
+Whenever you create or amend a Git commit for changes substantially implemented with Codex assistance, append this trailer to the commit message:
 
-**Steam 提供事实。**
+`Co-authored-by: Codex <codex@openai.com>`
 
-**MCP 负责读取、筛选、聚合和证据。**
-
-**LLM 负责理解用户并做最终判断。**
-
-不要为了让 MCP 看起来更“聪明”，把无法可靠推断的东西伪装成确定答案。
+Keep the human user as the primary commit author. Do not replace the user's Git author identity with Codex.
