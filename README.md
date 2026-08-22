@@ -722,31 +722,7 @@ Invoke-WebRequest http://127.0.0.1:8789/debug/status
 
 ---
 
-## 项目结构
 
-```text
-server.py
-config.py
-runtime.py
 
-models/
-clients/
-services/
-resolver/
-cache/
-tools/
-tests/
+Co-authored-by: Codex  and ChatGPT   by OpenAI
 
-examples/
-  questions.md
-```
-
----
-
-# Codex Git Attribution
-
-Whenever you create or amend a Git commit for changes substantially implemented with Codex assistance, append this trailer to the commit message:
-
-`Co-authored-by: Codex <codex@openai.com>`
-
-Keep the human user as the primary commit author. Do not replace the user's Git author identity with Codex.
