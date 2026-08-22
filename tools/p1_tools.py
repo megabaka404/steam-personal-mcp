@@ -18,7 +18,7 @@ def register_p1_tools(mcp, runtime) -> None:
     def wishlist_release_watch() -> dict[str, Any]:
         return runtime.p1.wishlist_release_watch()
 
-    register(mcp, "new_releases_for_me", "Find recent public Store releases matching the user's weighted library and recent play preferences. Parameters: days, count, exclude_owned.", new_releases_for_me)
+    register(mcp, "new_releases_for_me", "Retrieve recent public Store release candidates with candidate_score, evidence, and possible mismatches. candidate_score is retrieval priority, not final fit or purchase confidence. Parameters: days, count, exclude_owned.", new_releases_for_me)
     register(mcp, "library_value_stats", "Estimate current/MSRP Store value, playtime value, and priced/free/missing-price coverage for the owned library.", library_value_stats)
     register(mcp, "missing_dlc_for_owned_games", "Find unowned DLC for owned games with current Store price and discount. Parameters: only_discounted, min_discount, count, exclude_soundtracks, exclude_cosmetics.", missing_dlc_for_owned_games)
     register(mcp, "wishlist_release_watch", "Track wishlist release status and MCP-observed coming-soon or release-date transitions using public Store appdetails.", wishlist_release_watch)

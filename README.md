@@ -395,6 +395,17 @@ python server.py --stdio --mock
 | `get_almost_completed_games` | 接近全成就游戏   |
 | `get_completion_candidates`  | 补全成就候选    |
 
+## Recommendations
+
+- `pick_a_game_for_me(count=1, never_played_only=false, max_playtime_hours=null, min_playtime_hours=null, inactive_days=null, exclude_appids=null, randomize=true)`
+- `recommend_from_library(count=5, mode="balanced")`，mode 为 `balanced`、`backlog`、`return_to`、`comfort`、`recent`
+- `find_backlog_candidates(count=20, max_hours=null)`
+- `find_games_to_return_to(count=20, min_hours=1)`
+- `compare_my_games(games)`，最多 10 个
+- `what_should_i_play_next(count=5)`，返回 3–10 个候选
+- `recommend_store_for_me(count=15, max_price=null, min_discount=0, include_wishlist=true, exclude_early_access=false)`：返回候选召回和证据包；`candidate_score` 只表示召回优先级，不是最终适配度或购买置信度。每项尽量包含具体特征交集、最近/高时长游戏交集、wishlist、价格、评论、模式、Early Access、缺失数据和潜在冲突。
+- `find_similar_games(game=null, appid=null, count=20, exclude_owned=true, max_price=null)`
+
 ## Friends
 
 | Tool                           | 作用            |
@@ -416,9 +427,15 @@ python server.py --stdio --mock
 | `compare_store_games`         | 比较最多十个 Store 游戏          |
 | `get_game_dlc`                | 获取游戏 DLC                 |
 | `find_similar_games`          | 根据 Store metadata 寻找相似游戏 |
-| `new_releases_for_me`         | 从近期公开 Store 候选中寻找可能相关的新作 |
-| `missing_dlc_for_owned_games` | 查找已拥有游戏但尚未拥有的 DLC        |
-| `recommend_store_for_me`      | 根据个人库和 Store 数据生成未拥有游戏候选 |
+| `recommend_store_for_me`      | 返回候选召回和结构化证据，最终判断交给 LLM |
+
+## P1 Personal analysis
+
+- `new_releases_for_me(days=30, count=20, exclude_owned=true)`：从可发现的 Store 候选中筛选近期发布的候选，并复用具体特征证据；`candidate_score` 不是最终推荐判断。
+- `friend_activity_summary(limit=100)`：汇总公开好友在线、当前游戏和尽力而为的共同拥有游戏数据。
+- `library_value_stats()`：使用当前 Store/MSRP 价格估算库价值、游玩小时和每美元小时数。
+- `missing_dlc_for_owned_games(only_discounted=false, min_discount=0, count=100, exclude_soundtracks=false, exclude_cosmetics=false)`。
+- `wishlist_release_watch()`：记录愿望单的 released/ upcoming 状态和 MCP 观察到的变化。
 
 Store 搜索与推荐不是 Steam 全目录扫描。
 

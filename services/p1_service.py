@@ -6,6 +6,7 @@ from typing import Any
 
 from errors import AppError
 from models.store import parse_price
+from services.recommendation_features import profile_terms, unique
 
 
 class P1Service:
@@ -27,7 +28,7 @@ class P1Service:
         owned = self.store_recommendations._owned_ids()
         wishlist = self.store_recommendations._wishlist_ids() or set()
         profile = self.store_recommendations._preference_profile(owned)
-        terms = _profile_terms(profile)
+        terms = profile_terms(profile)
         raw_candidates = self.store_recommendations._candidate_pool(terms, wishlist, include_wishlist=True)
         now = dt.datetime.now(dt.timezone.utc)
         rows = []
@@ -44,33 +45,32 @@ class P1Service:
             age_days = (now - release_dt).total_seconds() / 86400
             if age_days < 0 or age_days > days:
                 continue
-            similarity, similarity_reasons, anchor = _best_profile_match(detail, profile)
-            price = item.price.public_dict() if item.price else {}
-            discount = int(price.get("discount_percent") or 0)
+            context = self.store_recommendations._candidate_context(item, detail, profile, wishlist, raw.get("_candidate_sources", []))
+            discount = context["discount_percent"]
             recency_bonus = max(0, 10 - age_days / max(1, days) * 10)
-            score = similarity * 0.78 + recency_bonus + min(8, discount * 0.08)
-            if item.review_percentage is not None:
-                score += min(4, item.review_percentage * 0.04)
-            reasons = [f"Released {release['date_text']}"]
-            reasons.extend(similarity_reasons[:2])
-            if anchor and anchor["game"].total_hours >= 20:
-                reasons.append(f"Matches high-playtime {anchor['game'].name}")
-            if discount:
-                reasons.append(f"Currently {discount}% off")
+            score = min(100, context["candidate_score"] + recency_bonus)
+            reasons = list(context["candidate_reasons"])
+            reasons.insert(0, f"Released {release['date_text']}")
             row = item.public_dict(compact=True)
+            row.update(context)
             row.update({
                 "release_date": release["date_text"],
                 "release_date_iso": release["date"].date().isoformat(),
                 "days_since_release": round(max(0, age_days), 1),
-                "score": round(min(100, score), 2),
-                "reasons": _unique(reasons),
+                "candidate_score": round(score, 2),
+                "candidate_reasons": unique(reasons),
+                "reasons": unique(reasons),
+                "score": round(score, 2),
+                "score_deprecated": True,
+                "score_note": "Deprecated compatibility alias for candidate_score; not final recommendation confidence.",
             })
             rows.append(row)
-        rows.sort(key=lambda row: (-row["score"], row["name"].casefold(), row["appid"]))
+        rows.sort(key=lambda row: (-row["candidate_score"], row["name"].casefold(), row["appid"]))
         return {
             "days": days,
             "count": min(count, len(rows)),
             "candidate_source": "Steam public Store search, featured specials, and wishlist; not a full catalog scan",
+            "interpretation": "Candidates and evidence only. candidate_score ranks retrieval priority and is not a final fit, purchase recommendation, or confidence score.",
             "games": rows[:count],
         }
 
@@ -297,66 +297,11 @@ def _contains_kind(item, detail: dict[str, Any], kind: str) -> bool:
     return kind in " ".join(str(value or "").casefold() for value in values)
 
 
-def _profile_terms(profile: list[dict[str, Any]]) -> list[str]:
-    counts: dict[str, float] = {}
-    for entry in profile:
-        for group in ("genres", "categories", "keywords"):
-            for value in entry["features"][group]:
-                counts[value] = counts.get(value, 0) + entry["weight"]
-    return [value for value, _ in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))]
-
-
-def _best_profile_match(detail: dict[str, Any], profile: list[dict[str, Any]]):
-    if not profile:
-        return 0.0, [], None
-    candidate = _features(detail)
-    ranked = []
-    for entry in profile:
-        score, reasons = _compare_features(entry["features"], candidate)
-        ranked.append((score, reasons, entry))
-    ranked.sort(key=lambda value: (value[0], value[2]["weight"]), reverse=True)
-    return ranked[0][0], ranked[0][1], ranked[0][2]
-
-
-def _features(detail: dict[str, Any]) -> dict[str, set[str]]:
-    genres = {_text(item.get("description") if isinstance(item, dict) else item) for item in (detail.get("genres") or [])}
-    categories = {_text(item.get("description") if isinstance(item, dict) else item) for item in (detail.get("categories") or [])}
-    text = " ".join([str(detail.get("name") or ""), str(detail.get("short_description") or ""), *genres, *categories])
-    keywords = {term for term in ("roguelike", "roguelite", "deckbuilder", "deckbuilding", "rpg", "strategy", "action", "adventure", "indie", "simulation", "tactical") if term in text.casefold()}
-    return {"genres": {item for item in genres if item}, "categories": {item for item in categories if item}, "keywords": keywords}
-
-
-def _compare_features(source: dict[str, set[str]], candidate: dict[str, set[str]]) -> tuple[float, list[str]]:
-    score = 0.0
-    reasons = []
-    overlap = source["genres"] & candidate["genres"]
-    if source["genres"] and overlap:
-        score += 60 * len(overlap) / max(1, len(source["genres"]))
-        reasons.extend(f"Shared {value.title()} genre" for value in sorted(overlap)[:2])
-    overlap = source["categories"] & candidate["categories"]
-    if source["categories"] and overlap:
-        score += 25 * len(overlap) / max(1, len(source["categories"]))
-        reasons.extend(f"Shared {value.title()} category" for value in sorted(overlap)[:2])
-    overlap = source["keywords"] & candidate["keywords"]
-    if source["keywords"] and overlap:
-        score += 15 * len(overlap) / max(1, len(source["keywords"]))
-        reasons.extend(f"Shared {value.title()} feature" for value in sorted(overlap)[:2])
-    return min(100, score), _unique(reasons)
-
-
 def _appid(raw: dict[str, Any]) -> int:
     try:
         return int(raw.get("appid", raw.get("id", 0)) or 0)
     except (TypeError, ValueError):
         return 0
-
-
-def _text(value: Any) -> str:
-    return str(value or "").strip().casefold()
-
-
-def _unique(values: list[str]) -> list[str]:
-    return list(dict.fromkeys(value for value in values if value))
 
 
 def _bounded(value: int, minimum: int, maximum: int) -> int:
