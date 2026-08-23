@@ -1,6 +1,6 @@
 # Steam Personal + Store MCP
 
-一个本地运行的 Steam MCP Server。默认只暴露 12 个按领域组织的复合 tool，降低 MCP schema 和上下文占用；底层 Python 服务仍保留，旧工具可通过兼容开关恢复。
+一个本地运行的 Steam MCP Server。默认暴露 12 个按领域组织的复合 tool。
 
 ## 可以做什么
 
@@ -127,7 +127,7 @@ STEAM_MCP_LEGACY_TOOLS=true
 
 ### 切换 Steam 商店地区
 
-商店地区使用 Steam 的两位国家/地区代码，通过 .env 中的 STEAM_STORE_COUNTRY 修改。修改后重启 MCP 服务才会生效。
+商店地区使用 Steam 的两位国家/地区代码，通过 .env 中的 STEAM_STORE_COUNTRY 修改。修改后重启 MCP 服务才会生效，默认中国区。
 
 中国区：
 
