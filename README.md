@@ -227,42 +227,7 @@ data/              本地历史数据库目录
 
 ---
 
-## 常见问题补充
 
-### Store 搜索结果为什么不全？
-
-公开 Store search / featured endpoint 不是 Steam 商品全量数据库。
-
-因此，以下工具返回的是有界候选集：
-
-~~~text
-search_store
-search_sales
-new_releases_for_me
-recommend_store_for_me
-~~~
-
-如果需要查询确定的游戏，优先使用 AppID。
-
-### 价格地区不对
-
-修改：
-
-~~~env
-STEAM_STORE_COUNTRY=cn
-~~~
-
-也可以使用：
-
-~~~text
-us
-jp
-...
-~~~
-
-项目不会自动做汇率换算。
-
----
 
 ## 安全
 
