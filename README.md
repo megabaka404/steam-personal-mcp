@@ -167,7 +167,10 @@ python server.py --stdio
 ~~~powershell
 python server.py --stdio --mock
 ~~~
-
+注：默认美区，改变区服可在终端mcp启动之前输入
+$env:STEAM_STORE_COUNTRY="cn"
+$env:STEAM_STORE_LANGUAGE="schinese"
+这是国服，其他国家或地区以此类推，让你的机改改即可。
 ## MCP 客户端配置
 
 如果客户端支持 Streamable HTTP，添加：
