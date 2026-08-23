@@ -28,7 +28,7 @@ class Settings:
     port: int = 8789
     cache_ttl: int = 300
     http_timeout: float = 15.0
-    store_country: str = "us"
+    store_country: str = "cn"
     store_language: str = "english"
     max_retries: int = 2
     min_request_interval: float = 0.15
@@ -47,7 +47,7 @@ class Settings:
             port=_int_env("STEAM_MCP_PORT", 8789, 1, 65535),
             cache_ttl=_int_env("STEAM_CACHE_TTL", 300, 1),
             http_timeout=_float_env("STEAM_HTTP_TIMEOUT", 15.0, 1.0),
-            store_country=os.getenv("STEAM_STORE_COUNTRY", "us").lower(),
+            store_country=os.getenv("STEAM_STORE_COUNTRY", "cn").lower(),
             store_language=os.getenv("STEAM_STORE_LANGUAGE", "english"),
             max_retries=_int_env("STEAM_MAX_RETRIES", 2, 0, 5),
             min_request_interval=_float_env("STEAM_MIN_REQUEST_INTERVAL", 0.15, 0.0),

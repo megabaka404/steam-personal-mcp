@@ -153,3 +153,17 @@ def test_recent_review_summary_does_not_copy_lifetime_summary():
     assert result["recent_review_percentage"] is None
     assert result["recent_review_available"] is False
     assert "independently verifiable" in result["recent_review_reason"]
+
+
+def test_store_country_defaults_to_china_and_can_be_overridden(monkeypatch, tmp_path):
+    monkeypatch.delenv("STEAM_STORE_COUNTRY", raising=False)
+    monkeypatch.delenv("STEAM_STORE_LANGUAGE", raising=False)
+    defaults = Settings.from_env(env_file=tmp_path / "missing.env")
+    assert defaults.store_country == "cn"
+    assert defaults.store_language == "english"
+
+    monkeypatch.setenv("STEAM_STORE_COUNTRY", "jp")
+    monkeypatch.setenv("STEAM_STORE_LANGUAGE", "japanese")
+    override = Settings.from_env(env_file=tmp_path / "missing.env")
+    assert override.store_country == "jp"
+    assert override.store_language == "japanese"

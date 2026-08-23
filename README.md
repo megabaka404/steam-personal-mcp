@@ -104,7 +104,7 @@ STEAM_ID=你的SteamID64
 
 - STEAM_ID 必须是 SteamID64。
 - Steam Profile 和 Game Details 需要对外可见，否则个人数据可能无法读取。
-- 商店价格取决于 STEAM_STORE_COUNTRY 和 STEAM_STORE_LANGUAGE。
+- 默认使用中国区商店；商店价格取决于 STEAM_STORE_COUNTRY 和 STEAM_STORE_LANGUAGE。
 
 可选配置：
 
@@ -113,7 +113,7 @@ STEAM_MCP_HOST=127.0.0.1
 STEAM_MCP_PORT=8789
 STEAM_MCP_COMPACT_TOOLS=true
 STEAM_MCP_LEGACY_TOOLS=false
-STEAM_STORE_COUNTRY=us
+STEAM_STORE_COUNTRY=cn
 STEAM_STORE_LANGUAGE=english
 STEAM_HISTORY_DB=data/steam_history.sqlite3
 ~~~
@@ -124,6 +124,33 @@ STEAM_HISTORY_DB=data/steam_history.sqlite3
 STEAM_MCP_COMPACT_TOOLS=false
 STEAM_MCP_LEGACY_TOOLS=true
 ~~~
+
+### 切换 Steam 商店地区
+
+商店地区使用 Steam 的两位国家/地区代码，通过 .env 中的 STEAM_STORE_COUNTRY 修改。修改后重启 MCP 服务才会生效。
+
+中国区：
+
+~~~dotenv
+STEAM_STORE_COUNTRY=cn
+STEAM_STORE_LANGUAGE=schinese
+~~~
+
+美国区：
+
+~~~dotenv
+STEAM_STORE_COUNTRY=us
+STEAM_STORE_LANGUAGE=english
+~~~
+
+日本区：
+
+~~~dotenv
+STEAM_STORE_COUNTRY=jp
+STEAM_STORE_LANGUAGE=japanese
+~~~
+
+其他常见代码包括 gb（英国）、de（德国）、fr（法国）。项目不会自动汇率换算；切换地区后，价格、货币、折扣和部分 Store 搜索结果都可能变化。
 
 ### 第四步：先用 Mock 模式检查服务
 
@@ -167,10 +194,10 @@ python server.py --stdio
 ~~~powershell
 python server.py --stdio --mock
 ~~~
-注：默认美区，改变区服可在终端mcp启动之前输入
+注：默认中国区。改变区服可在终端启动 MCP 之前输入：
 $env:STEAM_STORE_COUNTRY="cn"
 $env:STEAM_STORE_LANGUAGE="schinese"
-这是国服，其他国家或地区以此类推，让你的机改改即可。
+其他国家或地区按相同方式修改代码即可。
 ## MCP 客户端配置
 
 如果客户端支持 Streamable HTTP，添加：
@@ -229,6 +256,40 @@ data/              本地历史数据库目录
 
 ---
 
+
+### Store 搜索结果为什么不全？
+
+公开 Store search / featured endpoint 不是 Steam 商品全量数据库。
+
+因此，以下工具返回的是有界候选集：
+
+~~~text
+search_store
+search_sales
+new_releases_for_me
+recommend_store_for_me
+~~~
+
+如果需要查询确定的游戏，优先使用 AppID。
+
+### 价格地区不对
+
+确认 .env 中的地区和语言，例如：
+
+~~~env
+STEAM_STORE_COUNTRY=cn
+STEAM_STORE_LANGUAGE=schinese
+~~~
+
+也可以改为：
+
+~~~text
+us
+jp
+...
+~~~
+
+修改后重启服务。项目不会自动做汇率换算。
 
 
 ## 安全
