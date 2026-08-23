@@ -80,6 +80,21 @@ def test_recommendation_uses_candidate_score_and_excludes_owned(runtime):
     assert all("candidate_reasons" in item and "potential_mismatches" in item and "evidence" in item for item in result["games"])
 
 
+def test_recommendation_excludes_wishlist_from_featured_and_search_candidates(runtime):
+    wishlist = {int(item["appid"]) for item in runtime.steam.get_wishlist()}
+    raw_candidates = runtime.store_recommendations._candidate_pool(["Action"], set(), include_wishlist=False)
+
+    # This proves the fixture can reintroduce wishlist games through a non-wishlist source.
+    assert wishlist.intersection(raw_candidates)
+
+    result = runtime.store_recommendations.recommend_store_for_me(count=50, include_wishlist=False)
+    included_result = runtime.store_recommendations.recommend_store_for_me(count=50, include_wishlist=True)
+
+    assert result["wishlist_filter"] == {"include_wishlist": False, "available": True, "applied": True}
+    assert not wishlist.intersection({int(item["appid"]) for item in result["games"]})
+    assert wishlist.intersection({int(item["appid"]) for item in included_result["games"]})
+
+
 def test_recommendation_count_boundaries_and_deterministic_order(runtime):
     first = runtime.store_recommendations.recommend_store_for_me(count=5)
     second = runtime.store_recommendations.recommend_store_for_me(count=5)

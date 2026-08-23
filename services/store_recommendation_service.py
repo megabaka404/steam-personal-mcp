@@ -41,10 +41,14 @@ class StoreRecommendationService:
         wishlist = self._wishlist_ids()
         profile = self._preference_profile(owned)
         terms = profile_terms(profile)
-        raw_candidates = self._candidate_pool(terms, wishlist if include_wishlist else set(), include_wishlist=include_wishlist)
+        raw_candidates = self._candidate_pool(terms, wishlist if include_wishlist and wishlist is not None else set(), include_wishlist=include_wishlist)
         rows = []
         for appid, raw in raw_candidates.items():
             if appid in owned:
+                continue
+            # Wishlist IDs can re-enter through featured specials or Store search.
+            # Apply the exclusion after all candidate sources have been merged.
+            if not include_wishlist and wishlist is not None and appid in wishlist:
                 continue
             item, detail = self._candidate(appid, raw, owned, wishlist)
             if not _is_game_candidate(item):
@@ -61,9 +65,20 @@ class StoreRecommendationService:
             row.update({"score": score, "score_deprecated": True, "score_note": "Deprecated compatibility alias for candidate_score; not final recommendation confidence."})
             rows.append(row)
         rows.sort(key=lambda row: (-row["candidate_score"], row["name"].casefold(), row["appid"]))
+        candidate_source = "Steam public Store search and featured specials"
+        if include_wishlist:
+            candidate_source += ", and wishlist"
+        wishlist_filter = {
+            "include_wishlist": include_wishlist,
+            "available": wishlist is not None,
+            "applied": not include_wishlist and wishlist is not None,
+        }
+        if not include_wishlist and wishlist is None:
+            wishlist_filter["note"] = "Wishlist data was unavailable; wishlist exclusion could not be verified."
         return {
             "count": min(count, len(rows)),
-            "candidate_source": "Steam public Store search, featured specials, and wishlist; not a full catalog scan",
+            "candidate_source": f"{candidate_source}; not a full catalog scan",
+            "wishlist_filter": wishlist_filter,
             "interpretation": "Candidates and evidence only. candidate_score ranks retrieval priority and is not a final fit, purchase recommendation, or confidence score.",
             "games": rows[:count],
         }
