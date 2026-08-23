@@ -25,7 +25,6 @@ game_intel(action="snapshot") 汇总一个游戏的：
 - 发售日期、更新/build 信息、DLC、已拥有 DLC 和缺少的 DLC。
 - 本地安装路径、SizeOnDisk、实际目录大小和 shadercache；Windows 的 compatdata 明确标记为 not_applicable。
 
-数据缺失会返回 null、unavailable 或 missing_data，并标注 source；不会把未知状态猜成 unsupported，也不会把历史相关性说成更新造成的因果关系。
 
 ### 本地 Steam 和安全清理
 
